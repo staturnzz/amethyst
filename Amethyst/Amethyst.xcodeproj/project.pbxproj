@@ -34,7 +34,6 @@
 		2F5125832FBCE2FF00AE1074 /* dma.c in Sources */ = {isa = PBXBuildFile; fileRef = 2F5125822FBCE2FF00AE1074 /* dma.c */; };
 		2F631DE02FB207E9002FEF84 /* bootstrap-1500.tar.lzfse in Resources */ = {isa = PBXBuildFile; fileRef = 2F631DDE2FB2079B002FEF84 /* bootstrap-1500.tar.lzfse */; };
 		2F631DE12FB207E9002FEF84 /* bootstrap-1600.tar.lzfse in Resources */ = {isa = PBXBuildFile; fileRef = 2F631DDF2FB2079B002FEF84 /* bootstrap-1600.tar.lzfse */; };
-		2FA3530A2FECB38E0052953E /* tnsv2_updater.deb in Resources */ = {isa = PBXBuildFile; fileRef = 2FA353092FECAEA60052953E /* tnsv2_updater.deb */; };
 		2FC7DEE22F91977A0076631F /* basebins.tar in Resources */ = {isa = PBXBuildFile; fileRef = 2FC7DEE12F91977A0076631F /* basebins.tar */; };
 		2FDCFB112FC8761B00D87FDB /* trigon.c in Sources */ = {isa = PBXBuildFile; fileRef = 2FDCFB102FC8761B00D87FDB /* trigon.c */; };
 		2FDCFB142FC8762100D87FDB /* util.c in Sources */ = {isa = PBXBuildFile; fileRef = 2FDCFB132FC8762100D87FDB /* util.c */; };
@@ -84,13 +83,13 @@
 		2F3DCF392FB16CA700A257A2 /* libswift.deb */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libswift.deb; sourceTree = "<group>"; };
 		2F3DCF3D2FB16DAE00A257A2 /* zebra.deb */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = zebra.deb; sourceTree = "<group>"; };
 		2F3DCF3E2FB16DAF00A257A2 /* sileo.deb */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = sileo.deb; sourceTree = "<group>"; };
+		2F467F642FF1E4B300428E33 /* tnsv2_updater.deb */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = tnsv2_updater.deb; sourceTree = "<group>"; };
 		2F46C3542FEB31B900FFCCEB /* ppl.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ppl.h; sourceTree = "<group>"; };
 		2F46C3552FEB31B900FFCCEB /* ppl.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ppl.c; sourceTree = "<group>"; };
 		2F5125812FBCE2FF00AE1074 /* dma.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = dma.h; sourceTree = "<group>"; };
 		2F5125822FBCE2FF00AE1074 /* dma.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = dma.c; sourceTree = "<group>"; };
 		2F631DDE2FB2079B002FEF84 /* bootstrap-1500.tar.lzfse */ = {isa = PBXFileReference; lastKnownFileType = file; path = "bootstrap-1500.tar.lzfse"; sourceTree = "<group>"; };
 		2F631DDF2FB2079B002FEF84 /* bootstrap-1600.tar.lzfse */ = {isa = PBXFileReference; lastKnownFileType = file; path = "bootstrap-1600.tar.lzfse"; sourceTree = "<group>"; };
-		2FA353092FECAEA60052953E /* tnsv2_updater.deb */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = tnsv2_updater.deb; sourceTree = "<group>"; };
 		2FC7DEE12F91977A0076631F /* basebins.tar */ = {isa = PBXFileReference; lastKnownFileType = archive.tar; name = basebins.tar; path = ../../basebins/basebins.tar; sourceTree = "<group>"; };
 		2FDCFB0F2FC8761B00D87FDB /* trigon.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = trigon.h; sourceTree = "<group>"; };
 		2FDCFB102FC8761B00D87FDB /* trigon.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = trigon.c; sourceTree = "<group>"; };
@@ -121,9 +120,9 @@
 			isa = PBXGroup;
 			children = (
 				2F631DDE2FB2079B002FEF84 /* bootstrap-1500.tar.lzfse */,
+				2F467F642FF1E4B300428E33 /* tnsv2_updater.deb */,
 				2F631DDF2FB2079B002FEF84 /* bootstrap-1600.tar.lzfse */,
 				2F3DCF3E2FB16DAF00A257A2 /* sileo.deb */,
-				2FA353092FECAEA60052953E /* tnsv2_updater.deb */,
 				2F3DCF3D2FB16DAE00A257A2 /* zebra.deb */,
 				2F3DCF392FB16CA700A257A2 /* libswift.deb */,
 				2FC7DEE12F91977A0076631F /* basebins.tar */,
@@ -275,7 +274,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2FA3530A2FECB38E0052953E /* tnsv2_updater.deb in Resources */,
 				2F631DE02FB207E9002FEF84 /* bootstrap-1500.tar.lzfse in Resources */,
 				2F631DE12FB207E9002FEF84 /* bootstrap-1600.tar.lzfse in Resources */,
 				2F3DCF412FB16EAE00A257A2 /* sileo.deb in Resources */,
@@ -469,7 +467,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/Amethyst",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				OTHER_LDFLAGS = (
 					"-framework",
 					IOSurface,
@@ -509,7 +507,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/Amethyst",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				OTHER_LDFLAGS = (
 					"-framework",
 					IOSurface,

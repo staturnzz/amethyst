@@ -100,16 +100,12 @@ static int init_info(void) {
     kinfo->offsets.vnode.ubcinfo = 0x78;
     kinfo->offsets.specinfo.flags = 0x10;
 
-    kinfo->offsets.pmap.cs_enforced = (kinfo->version[0] == 12) ? 0x111 : 0x108;
-    if (kinfo->version[0] == 12 && kinfo->version[1] >= 3) {
-        kinfo->offsets.pmap.cs_enforced = 0x119;
-    }
-
     if (kinfo->version[0] == 12 && kinfo->version[1] == 0) {
         kinfo->offsets.vm_map.flags = 0x10c;
     }
 
     if (kinfo->version[0] == 12) {
+        kinfo->offsets.pmap.cs_enforced = (kinfo->version[1] >= 1) ? 0x119 : 0x111;
         kinfo->offsets.task.bsd_info = (kinfo->protections.pac ? 0x368 : 0x358);
         kinfo->offsets.task.t_flags = (kinfo->protections.pac ? 0x3a0 : 0x390);
         kinfo->offsets.task.itk_space = 0x300;
@@ -125,6 +121,7 @@ static int init_info(void) {
         kinfo->offsets.ubc_info.cs_blob = 0x50;
         kinfo->offsets.namecache.vnode = 0x48;
     } else if (kinfo->version[0] == 13) {
+        kinfo->offsets.pmap.cs_enforced = 0x108;
         kinfo->offsets.task.bsd_info = (kinfo->protections.pac ? 0x388 : 0x380);
         kinfo->offsets.task.t_flags = (kinfo->protections.pac ? 0x3c0 : 0x3b8);
         kinfo->offsets.task.itk_space = 0x320;

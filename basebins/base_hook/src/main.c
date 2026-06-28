@@ -35,6 +35,10 @@ int init_tweaks(char *exec_path) {
     const char *loader_path = get_tweak_loader();
     if (loader_path == NULL) return -1;
 
+    if (strcmp(loader_path, SONAR_LOADER) == 0) {
+        setenv("SONAR_LOADER", "1", 1);
+    }
+
     void *handle = dlopen(loader_path, RTLD_NOW);
     if (handle == NULL) {
         jbserver_process_binary(loader_path, NULL);

@@ -118,12 +118,8 @@ static int init_device(void) {
     kinfo->offsets.proc.p_svuid = 0x32;
     kinfo->offsets.proc.p_svgid = 0x36;
     
-    kinfo->offsets.pmap.cs_enforced = (kinfo->version[0] == 12) ? 0x111 : 0x108;
-    if (kinfo->version[0] == 12 && kinfo->version[1] >= 3) {
-        kinfo->offsets.pmap.cs_enforced = 0x119;
-    }
-
     if (kinfo->version[0] == 12) {
+        kinfo->offsets.pmap.cs_enforced = (kinfo->version[1] >= 1) ? 0x119 : 0x111;
         kinfo->offsets.task.bsd_info = (kinfo->protections.pac ? 0x368 : 0x358);
         kinfo->offsets.task.t_flags = (kinfo->protections.pac ? 0x3a0 : 0x390);
         kinfo->offsets.task.itk_space = 0x300;
@@ -134,6 +130,7 @@ static int init_device(void) {
         kinfo->offsets.proc.csflags = 0x290;
         kinfo->offsets.proc.p_textvp = 0x230;
     } else if (kinfo->version[0] == 13) {
+        kinfo->offsets.pmap.cs_enforced = 0x108;
         kinfo->offsets.task.bsd_info = (kinfo->protections.pac ? 0x388 : 0x380);
         kinfo->offsets.task.t_flags = (kinfo->protections.pac ? 0x3c0 : 0x3b8);
         kinfo->offsets.task.itk_space = 0x320;

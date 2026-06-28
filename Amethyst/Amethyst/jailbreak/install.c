@@ -225,6 +225,7 @@ void verify_install(void) {
         }
     }
     
+    unlink("/.DS_Store");
     show_non_default_apps();
     sync();
 }

@@ -5,7 +5,6 @@ LDID = $(shell which ldid)
 
 CFLAGS := -I./include -I../common/include -isysroot $(SDK) -mios-version-min=12.0 -arch arm64 -arch arm64e \
 	-Werror -Wall -Wno-unused-variable -Wno-unused-function -fvisibility=hidden -fvisibility-inlines-hidden
-#	-Wno-deprecated-declarations -fstandalone-debug -g -O0
 
 LDFLAGS := -L$(SDK)/usr/lib -lc -lSystem -dynamiclib -framework CoreFoundation -framework ImageIO \
 	-framework CoreGraphics -framework IOSurface -framework IOKit ../resources/IOMobileFramebuffer.tbd \
