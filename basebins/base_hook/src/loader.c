@@ -191,6 +191,24 @@ static int spawn_handler(pid_t *pid, const char *path, posix_spawn_file_actions_
         status = sys_execve(target_path, target_argv, target_env);
     }
 
+    if (!is_exec && status == 0 && pid != NULL && (attr_flags & POSIX_SPAWN_START_SUSPENDED) != 0) {
+        pid_t target_pid = *pid;
+        if (target_pid > 1 || target_pid != getpid()) {
+            jbserver_unsandbox_t unsandbox_type = jbserver_unsandbox_type(target_path);
+            uid_t target_uid = getuid();
+            uid_t target_gid = getgid();
+
+            struct stat st = {0};
+            if (lstat(target_path, &st) == 0) {
+                if (S_ISREG(st.st_mode) == 1) {
+                    if ((st.st_mode & S_ISUID) == S_ISUID) target_uid = st.st_uid;
+                    if ((st.st_mode & S_ISGID) == S_ISGID) target_gid = st.st_gid;
+                }
+            }
+            jbserver_init_process(target_pid, target_uid, target_gid, unsandbox_type);
+        }
+    }
+
     if (release_argv) {
         if (target_argv != NULL) {
             for (uint32_t i = 0; target_argv[i] != NULL; i++) {

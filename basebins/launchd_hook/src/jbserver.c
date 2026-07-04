@@ -11,7 +11,9 @@
 static xpc_object_t (*xpc_serializer_unpack_orig)(void *, void *, void *) = NULL;
 static int (*xpc_receive_mach_msg_orig)(void *a1, void *a2, void *a3, void *a4, xpc_object_t *output) = NULL;
 static xpc_object_t (*xpc_dictionary_get_value_orig)(xpc_object_t dict, const char *key) = NULL;
-static CFMutableDictionaryRef debugserver_ents = NULL;
+static int (*MISValidateSignatureAndCopyInfo)(CFStringRef File, CFDictionaryRef Opts, void **Info);
+pthread_mutex_t fakesigned_lock = PTHREAD_MUTEX_INITIALIZER;
+xpc_object_t fakesigned_dict = NULL;
 
 static sandbox_ext_t sb_ext[] = {
     {SANDBOX_READ, "/private/var/mobile"},
@@ -333,6 +335,27 @@ static jbserver_err_t jbserver_patch_setgid(xpc_object_t request, xpc_object_t r
     return JBSERVER_ERR_SUCCESS;
 }
 
+static jbserver_err_t jbserver_check_fakesigned(xpc_object_t request, xpc_object_t reply) {
+    const char *path = xpc_dictionary_get_string(request, "path");
+    if (path == NULL) return JBSERVER_ERR_INVALID_PATH;
+    
+    pthread_mutex_lock(&fakesigned_lock);
+    bool result = xpc_dictionary_get_bool(fakesigned_dict, path);
+    pthread_mutex_unlock(&fakesigned_lock);
+    xpc_dictionary_set_bool(reply, "result", result);
+    return JBSERVER_ERR_SUCCESS;
+}
+
+static jbserver_err_t jbserver_add_fakesigned(xpc_object_t request, xpc_object_t reply) {
+    const char *path = xpc_dictionary_get_string(request, "path");
+    if (path == NULL) return JBSERVER_ERR_INVALID_PATH;
+    
+    pthread_mutex_lock(&fakesigned_lock);
+    xpc_dictionary_set_bool(fakesigned_dict, path, true);
+    pthread_mutex_unlock(&fakesigned_lock);
+    return JBSERVER_ERR_SUCCESS;
+}
+
 static jbserver_err_t jbserver_heartbeat(xpc_object_t request, xpc_object_t reply) {
     return 0x1337;
 }
@@ -351,6 +374,8 @@ static void jbserver_handle_request(xpc_object_t request) {
         case JBSERVER_CMD_UNSANDBOX: err = jbserver_unsandbox(request, reply); break;
         case JBSERVER_CMD_PATCH_SETUID: err = jbserver_patch_setuid(request, reply); break;
         case JBSERVER_CMD_PATCH_SETGID: err = jbserver_patch_setgid(request, reply); break;
+        case JBSERVER_CMD_CHECK_FAKESIGNED: err = jbserver_check_fakesigned(request, reply); break;
+        case JBSERVER_CMD_ADD_FAKESIGNED: err = jbserver_add_fakesigned(request, reply); break;
         case JBSERVER_CMD_HEARTBEAT: err = jbserver_heartbeat(request, reply); break;
         default: err = JBSERVER_ERR_UNKNOWN_CMD; break;
     }
@@ -365,6 +390,7 @@ static void jbserver_prepare_reboot(void) {
     draw_splash_screen();
     usleep(100000);
 
+    update_jailbreak();
     unlink("/var/db/sysstatuscheck_should_check");
     unlink("/var/db/mmaintenanced");
     unlink("/tmp/mmaintenanced");
@@ -469,6 +495,7 @@ static xpc_object_t xpc_dictionary_get_value_hook(xpc_object_t dict, const char 
 int init_server(void) {
     void *handle = dlopen("/usr/lib/system/libxpc.dylib", RTLD_NOW);
     if (handle == NULL) handle = RTLD_DEFAULT;
+    if ((fakesigned_dict = xpc_dictionary_create(NULL, NULL, 0)) == NULL) return -1;
 
     if (kinfo->version[0] <= 12) {
         void *symbol = dlsym(handle, "_xpc_serializer_unpack");

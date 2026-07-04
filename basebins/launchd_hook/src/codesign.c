@@ -31,19 +31,17 @@ static int create_cs_blob(int fd, char *path, uint32_t slice_offset, uint64_t vn
     macho_release(macho);
     if (status != 0) return -1;
 
-    uint64_t cs_blob = kread64(ubc_info + koffsetof(ubc_info, cs_blob));
-    if (cs_blob != 0) {
-        while (cs_blob != 0) {
-            uint32_t current_hash[20] = {0};
-            kread_buf(cs_blob + offsetof(cs_blob_t, csb_cdhash), current_hash, 20);
-            if (memcmp(cd_hash, current_hash, 20) == 0) {
-                free(cs_data);
-                return 0;
-            }
-            cs_blob = kread64(cs_blob);
+    uint64_t existing_cs_blob = kread64(ubc_info + koffsetof(ubc_info, cs_blob));
+    while (KADDR_VALID(existing_cs_blob)) {
+        uint32_t current_hash[20] = {0};
+        kread_buf(existing_cs_blob + offsetof(cs_blob_t, csb_cdhash), current_hash, 20);
+        if (memcmp(cd_hash, current_hash, 20) == 0) {
+            free(cs_data);
+            return 0;
         }
+        existing_cs_blob = kread64(existing_cs_blob);
     }
-    
+
     if (!trustcache_check(cd_hash)) {
         trustcache_lock_add_hash(cd_hash, CS_HASHTYPE_SHA256);
     }
@@ -58,27 +56,43 @@ static int create_cs_blob(int fd, char *path, uint32_t slice_offset, uint64_t vn
     free(cs_data);
     if (status != 0) return -1;
     
+    usleep(1000);
     ubc_info = kread64(vnode + koffsetof(vnode, ubcinfo));
     if (ubc_info == 0) return -1;
+    
+    uint64_t current_cs_blob = kread64(ubc_info + koffsetof(ubc_info, cs_blob));
+    uint64_t target_cs_blob = 0;
+    
+    while (KADDR_VALID(current_cs_blob)) {
+        if (kread64(current_cs_blob + offsetof(cs_blob_t, csb_base_offset)) == (uint64_t)slice_offset) {
+            uint32_t current_hash[20] = {0};
+            kread_buf(current_cs_blob + offsetof(cs_blob_t, csb_cdhash), current_hash, 20);
 
-    cs_blob = kread64(ubc_info + koffsetof(ubc_info, cs_blob));
-    if (cs_blob == 0) return -1;
+            if (memcmp(cd_hash, current_hash, 20) == 0) {
+                target_cs_blob = current_cs_blob;
+                break;
+            }
+        }
+        current_cs_blob = kread64(current_cs_blob);
+    }
 
-    cs_blob_t blob_data = {0};
-    kread_buf(cs_blob, &blob_data, sizeof(cs_blob_t));
+    if (target_cs_blob == 0) return -1;
+    uint32_t csb_flags = kread32(target_cs_blob + offsetof(cs_blob_t, csb_flags));
+    csb_flags &= ~(CS_HARD|CS_RESTRICT|CS_KILL|CS_REQUIRE_LV|CS_FORCED_LV|CS_ENFORCEMENT);
+    csb_flags |= CS_VALID|CS_SIGNED|CS_GET_TASK_ALLOW|CS_DEBUGGED|CS_PLATFORM_PATH|CS_PLATFORM_BINARY|CS_EXECSEG_SKIP_LV;
+    kwrite32(target_cs_blob + offsetof(cs_blob_t, csb_flags), csb_flags);
 
-    blob_data.csb_flags &= ~(CS_HARD|CS_RESTRICT|CS_KILL|CS_REQUIRE_LV);
-    blob_data.csb_flags |= CS_VALID|CS_SIGNED|CS_GET_TASK_ALLOW|CS_DEBUGGED|CS_PLATFORM_PATH|CS_PLATFORM_BINARY;
-    blob_data.csb_platform.binary = 1;
-    blob_data.csb_signer_type = CS_SIGNER_TYPE_UNKNOWN;
-    blob_data.csb_reconstituted = 1;
-    blob_data.csb_base_offset = slice->offset;
-    blob_data.csb_mem_size = cs_size;
-    blob_data.csb_cpu_type = CPU_TYPE_ARM64;
-    kwrite_buf(cs_blob, &blob_data, sizeof(cs_blob_t));
+    kwrite32(target_cs_blob + offsetof(cs_blob_t, csb_signer_type), CS_SIGNER_TYPE_UNKNOWN);
+   // kwrite32(target_cs_blob + offsetof(cs_blob_t, csb_reconstituted), 1);
+    kwrite32(target_cs_blob + offsetof(cs_blob_t, csb_cpu_type), CPU_TYPE_ARM64);
+    kwrite32(target_cs_blob + offsetof(cs_blob_t, csb_flags), csb_flags);
+
+    if (kread32(target_cs_blob + offsetof(cs_blob_t, csb_platform.binary)) == 0) {
+        kwrite32(target_cs_blob + offsetof(cs_blob_t, csb_platform.binary), 1);
+    }
 
 #ifdef __arm64e__
-    uint64_t pmap_cs_entry = kread64(cs_blob + 0xb0);
+    uint64_t pmap_cs_entry = kread64(target_cs_blob + 0xb0);
     if (KADDR_VALID(pmap_cs_entry)) {
         uint32_t current_trustlevel = kread32(pmap_cs_entry + koffsetof(pmap_cs_code_directory, trust));
         if (current_trustlevel != 1) {
@@ -93,6 +107,9 @@ static int create_cs_blob(int fd, char *path, uint32_t slice_offset, uint64_t vn
         }
     }
 #endif
+
+    fcntl(fd, F_FLUSH_DATA);
+    usleep(1000);
     return 0;
 }
 
@@ -123,7 +140,7 @@ err:
 
 int fixup_cs_flags(uint64_t proc) {
     if (proc == 0) return -1;
-    uint32_t add_flags = CS_PLATFORM_BINARY | CS_VALID | CS_DEBUGGED | CS_INVALID_ALLOWED | CS_GET_TASK_ALLOW;
+    uint32_t add_flags = CS_PLATFORM_BINARY | CS_VALID | CS_DEBUGGED | CS_INVALID_ALLOWED | CS_GET_TASK_ALLOW | CS_EXECSEG_SKIP_LV;
     uint32_t remove_flags = CS_RESTRICT | CS_HARD | CS_KILL | CS_REQUIRE_LV | CS_FORCED_LV | CS_ENFORCEMENT;
 
     uint32_t cs_flags = kread32(proc + koffsetof(proc, csflags));

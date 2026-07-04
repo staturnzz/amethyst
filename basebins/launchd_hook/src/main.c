@@ -209,6 +209,10 @@ __attribute__((constructor)) void ctor(void) {
     }
 #endif
 
+    if (kinfo->first_run == 0 && kinfo->using_tnsv2 == 1) {
+        update_jailbreak();
+    }
+
     init_server();
     init_loader();
 

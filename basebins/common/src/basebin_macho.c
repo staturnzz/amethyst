@@ -1,6 +1,41 @@
 #include "basebin_util.h"
 #include "basebin_macho.h"
 
+#ifdef LAUNCHD_HOOK
+#include <CoreFoundation/CoreFoundation.h>
+extern pthread_mutex_t fakesigned_lock;
+extern xpc_object_t fakesigned_dict;
+#else
+#include "basebin_jbserver.h"
+#endif
+
+static bool check_fakesigned(char *path) {
+    if (path == NULL) return false;
+#ifdef LAUNCHD_HOOK
+    if (fakesigned_dict == NULL) return false;
+    pthread_mutex_lock(&fakesigned_lock);
+    bool result = xpc_dictionary_get_bool(fakesigned_dict, path);
+    pthread_mutex_unlock(&fakesigned_lock);
+    return result;
+#else
+    int32_t result = -1;
+    jbserver_check_fakesigned(path, &result);
+    return (result == 1);
+#endif
+}
+
+static void add_fakesigned(char *path) {
+    if (path == NULL) return;
+#ifdef LAUNCHD_HOOK
+    if (fakesigned_dict == NULL) return;
+    pthread_mutex_lock(&fakesigned_lock);
+    xpc_dictionary_set_bool(fakesigned_dict, path, true);
+    pthread_mutex_unlock(&fakesigned_lock);
+#else
+    jbserver_add_fakesigned(path);
+#endif
+}
+
 void macho_release(macho_ctx_t *ctx) {
     if (ctx == NULL) return;
     if (ctx->slice_list != NULL) free(ctx->slice_list);
@@ -32,64 +67,48 @@ macho_ctx_t *macho_load(const char *path) {
     if ((ctx->file_size = (uint32_t)lseek(fd, 0, SEEK_END)) < sizeof(struct mach_header)) goto err;
     lseek(fd, 0, SEEK_SET);
     
-    if ((ctx->file_data = mmap(NULL, ctx->file_size, PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0)) == MAP_FAILED) goto err;
+    if ((ctx->file_data = mmap(NULL, ctx->file_size, PROT_READ, MAP_PRIVATE, fd, 0)) == MAP_FAILED) goto err;
     close(fd);
     fd = -1;
     
+    if ((ctx->path = strdup(path)) == NULL) goto err;
     uint32_t magic = *(uint32_t *)ctx->file_data;
     if (!MACHO_VALID(magic)) goto err;
     bool need_swap = MACHO_REQUIRES_SWAP(magic);
     
     if (MACHO_FAT(magic)) {
-        struct fat_header *fhdr = (struct fat_header *)ctx->file_data;
-        if (need_swap) swap_fat_header(fhdr, 0);
-        
-        ctx->slice_list = calloc(1, sizeof(macho_slice_t) * (fhdr->nfat_arch + 1));
+        struct fat_header fhdr = {0};
+        memcpy(&fhdr, ctx->file_data, sizeof(struct fat_header));
+        if (need_swap) swap_fat_header(&fhdr, 0);
+
+        ctx->slice_list = calloc(1, sizeof(macho_slice_t) * (fhdr.nfat_arch + 1));
         if (ctx->slice_list == NULL) goto err;
         ctx->slice_count = 0;
 
-        for (uint32_t i = 0; i < fhdr->nfat_arch; i++) {
-            size_t arch_offset = sizeof(struct fat_header) + (sizeof(struct fat_arch) * i);
-            struct fat_arch *arch = (struct fat_arch *)(ctx->file_data + arch_offset);
-            if (need_swap) swap_fat_arch(arch, 1, 0);
+        for (uint32_t i = 0; i < fhdr.nfat_arch; i++) {
+            struct fat_arch arch = {0};
+            memcpy(&arch, ctx->file_data + (sizeof(struct fat_header) + (sizeof(struct fat_arch) * i)), sizeof(struct fat_arch));
+            if (need_swap) swap_fat_arch(&arch, 1, 0);
+            if (MACHO_32BIT(*(uint32_t *)(ctx->file_data + arch.offset))) continue;
+            if ((arch.offset & 0xfff) != 0 || arch.size < 0x1000) continue;
 
-            uint32_t file_type = -1;
-            if (MACHO_32BIT(*(uint32_t *)(ctx->file_data + arch->offset))) {
-                struct mach_header hdr = {0};
-                memcpy(&hdr, ctx->file_data + arch->offset, sizeof(struct mach_header));
-                if (MACHO_REQUIRES_SWAP(hdr.magic)) swap_mach_header(&hdr, 0);
-                file_type = hdr.filetype;
-            } else {
-                struct mach_header_64 hdr = {0};
-                memcpy(&hdr, ctx->file_data + arch->offset, sizeof(struct mach_header_64));
-                if (MACHO_REQUIRES_SWAP(hdr.magic)) swap_mach_header_64(&hdr, 0);
-                file_type = hdr.filetype;
-            }
+            struct mach_header_64 hdr = {0};
+            memcpy(&hdr, ctx->file_data + arch.offset, sizeof(struct mach_header_64));
+            if (MACHO_REQUIRES_SWAP(hdr.magic)) swap_mach_header_64(&hdr, 0);      
             
-            if (macho_supported(arch->cputype, arch->cpusubtype, file_type)) {
-                ctx->slice_list[ctx->slice_count].cpu_type = arch->cputype;
-                ctx->slice_list[ctx->slice_count].cpu_subtype = arch->cpusubtype;
-                ctx->slice_list[ctx->slice_count].offset = arch->offset;
-                ctx->slice_list[ctx->slice_count].size = arch->size;
+            if (macho_supported(arch.cputype, arch.cpusubtype, hdr.filetype)) {
+                ctx->slice_list[ctx->slice_count].hdr = (struct mach_header_64 *)(ctx->file_data + arch.offset);
+                ctx->slice_list[ctx->slice_count].load_cmd = (struct load_command *)(ctx->slice_list[ctx->slice_count].hdr + 1);
+                ctx->slice_list[ctx->slice_count].cpu_type = arch.cputype;
+                ctx->slice_list[ctx->slice_count].cpu_subtype = arch.cpusubtype;
+                ctx->slice_list[ctx->slice_count].file_type = hdr.filetype;
+                ctx->slice_list[ctx->slice_count].cmd_count = hdr.ncmds;
+                ctx->slice_list[ctx->slice_count].offset = arch.offset;
+                ctx->slice_list[ctx->slice_count].size = arch.size;
                 ctx->slice_list[ctx->slice_count].file_data = ctx->file_data;
                 ctx->slice_list[ctx->slice_count].file_size = ctx->file_size;
-                
-                ctx->slice_list[ctx->slice_count].hdr = ctx->file_data + arch->offset;
-                ctx->slice_list[ctx->slice_count].is_32bit = MACHO_32BIT(ctx->slice_list[ctx->slice_count].hdr32->magic);
-                ctx->slice_list[ctx->slice_count].has_ptrauth = ((arch->cputype == CPU_TYPE_ARM64) && (arch->cpusubtype & CPU_SUBTYPE_ARM64E) != 0);
-                
-                if (MACHO_REQUIRES_SWAP(ctx->slice_list[ctx->slice_count].hdr32->magic)) {
-                    if (ctx->slice_list[ctx->slice_count].is_32bit) swap_mach_header(ctx->slice_list[ctx->slice_count].hdr32, 0);
-                    else swap_mach_header_64(ctx->slice_list[ctx->slice_count].hdr64, 0);
-                }
-                
-                if (ctx->slice_list[ctx->slice_count].is_32bit) {
-                    ctx->slice_list[ctx->slice_count].load_cmd = (struct load_command *)(ctx->slice_list[ctx->slice_count].hdr32 + 1);
-                    ctx->slice_list[ctx->slice_count].cmd_count = ctx->slice_list[ctx->slice_count].hdr32->ncmds;
-                } else {
-                    ctx->slice_list[ctx->slice_count].load_cmd = (struct load_command *)(ctx->slice_list[ctx->slice_count].hdr64 + 1);
-                    ctx->slice_list[ctx->slice_count].cmd_count = ctx->slice_list[ctx->slice_count].hdr64->ncmds;
-                }
+                ctx->slice_list[ctx->slice_count].has_ptrauth = ((arch.cputype == CPU_TYPE_ARM64) && (arch.cpusubtype & CPU_SUBTYPE_ARM64E) != 0);
+                ctx->slice_list[ctx->slice_count].path = ctx->path;
                 ctx->slice_count++;
             }
         }
@@ -98,48 +117,30 @@ macho_ctx_t *macho_load(const char *path) {
         ctx->slice_list = calloc(1, sizeof(macho_slice_t) * 2);
         if (ctx->slice_list == NULL) goto err;
         ctx->slice_count = 0;
+
+        if (MACHO_32BIT(*(uint32_t *)(ctx->file_data))) goto err;
+        struct mach_header_64 hdr = {0};
+        memcpy(&hdr, ctx->file_data, sizeof(struct mach_header_64));
+        if (MACHO_REQUIRES_SWAP(hdr.magic)) swap_mach_header_64(&hdr, 0);      
         
-        uint32_t file_type = -1;
-        cpu_type_t cpu_type = -1;
-        cpu_subtype_t cpu_subtype = -1;
-        
-        if (MACHO_32BIT(*(uint32_t *)ctx->file_data)) {
-            if (MACHO_REQUIRES_SWAP(*(uint32_t *)ctx->file_data)) swap_mach_header((struct mach_header *)ctx->file_data, 0);
-            file_type = ((struct mach_header *)ctx->file_data)->filetype;
-            cpu_type = ((struct mach_header *)ctx->file_data)->cputype;
-            cpu_subtype = ((struct mach_header *)ctx->file_data)->cpusubtype;
-        } else {
-            if (MACHO_REQUIRES_SWAP(*(uint32_t *)ctx->file_data)) swap_mach_header_64((struct mach_header_64 *)ctx->file_data, 0);
-            file_type = ((struct mach_header_64 *)ctx->file_data)->filetype;
-            cpu_type = ((struct mach_header_64 *)ctx->file_data)->cputype;
-            cpu_subtype = ((struct mach_header_64 *)ctx->file_data)->cpusubtype;
-        }
-        
-        if (macho_supported(cpu_type, cpu_subtype, file_type)) {
-            ctx->slice_list[ctx->slice_count].cpu_type = cpu_type;
-            ctx->slice_list[ctx->slice_count].cpu_subtype = cpu_subtype;
+        if (macho_supported(hdr.cputype, hdr.cpusubtype, hdr.filetype)) {
+            ctx->slice_list[ctx->slice_count].hdr = (struct mach_header_64 *)(ctx->file_data);
+            ctx->slice_list[ctx->slice_count].load_cmd = (struct load_command *)(ctx->slice_list[ctx->slice_count].hdr + 1);
+            ctx->slice_list[ctx->slice_count].cpu_type = hdr.cputype;
+            ctx->slice_list[ctx->slice_count].cpu_subtype = hdr.cpusubtype;
+            ctx->slice_list[ctx->slice_count].file_type = hdr.filetype;
+            ctx->slice_list[ctx->slice_count].cmd_count = hdr.ncmds;
             ctx->slice_list[ctx->slice_count].offset = 0;
             ctx->slice_list[ctx->slice_count].size = ctx->file_size;
             ctx->slice_list[ctx->slice_count].file_data = ctx->file_data;
             ctx->slice_list[ctx->slice_count].file_size = ctx->file_size;
-            
-            ctx->slice_list[ctx->slice_count].hdr = ctx->file_data;
-            ctx->slice_list[ctx->slice_count].is_32bit = MACHO_32BIT(ctx->slice_list[ctx->slice_count].hdr32->magic);
-            ctx->slice_list[ctx->slice_count].has_ptrauth = ((cpu_type == CPU_TYPE_ARM64) && (cpu_subtype & CPU_SUBTYPE_ARM64E) != 0);
-            
-            if (ctx->slice_list[ctx->slice_count].is_32bit) {
-                ctx->slice_list[ctx->slice_count].load_cmd = (struct load_command *)(ctx->slice_list[ctx->slice_count].hdr32 + 1);
-                ctx->slice_list[ctx->slice_count].cmd_count = ctx->slice_list[ctx->slice_count].hdr32->ncmds;
-            } else {
-                ctx->slice_list[ctx->slice_count].load_cmd = (struct load_command *)(ctx->slice_list[ctx->slice_count].hdr64 + 1);
-                ctx->slice_list[ctx->slice_count].cmd_count = ctx->slice_list[ctx->slice_count].hdr64->ncmds;
-            }
+            ctx->slice_list[ctx->slice_count].has_ptrauth = ((hdr.cputype == CPU_TYPE_ARM64) && (hdr.cpusubtype & CPU_SUBTYPE_ARM64E) != 0);
+            ctx->slice_list[ctx->slice_count].path = ctx->path;
             ctx->slice_count++;
         }
     }
     
     if (ctx->slice_count == 0) goto err;
-    ctx->path = strdup(path);
     return ctx;
 
 err:
@@ -186,10 +187,29 @@ macho_rpaths_t *macho_resolve_rpaths(macho_ctx_t *ctx) {
     }
     
     uint32_t add_count = 0;
-    rpaths->list = calloc(1, (rpaths->count+6) * sizeof(char *));
+    rpaths->list = calloc(1, (rpaths->count+8) * sizeof(char *));
     if (rpaths->list == NULL) goto err;
 
+    char path_buf[PATH_MAX] = {0};
+    snprintf(path_buf, PATH_MAX-1, "%s/lib", rpaths->relative_path);
+    if (access(path_buf, F_OK) == 0) rpaths->list[add_count++] = strdup(path_buf);
+
+    snprintf(path_buf, PATH_MAX-1, "%s/Frameworks", rpaths->relative_path);
+    if (access(path_buf, F_OK) == 0) rpaths->list[add_count++] = strdup(path_buf);
+
+    char *app_path = resolve_app_path(rpaths->relative_path);
+    if (app_path != NULL) {
+        snprintf(path_buf, PATH_MAX-1, "%s/Frameworks", app_path);
+        if (access(path_buf, F_OK) == 0) rpaths->list[add_count++] = strdup(path_buf);
+
+        snprintf(path_buf, PATH_MAX-1, "%s/lib", app_path);
+        if (access(path_buf, F_OK) == 0) rpaths->list[add_count++] = strdup(path_buf);
+        free(app_path);
+    }
+
+    rpaths->list[add_count++] = rpaths->relative_path;
     load_cmd = slice->load_cmd;
+
     for (uint32_t i = 0; i < slice->cmd_count; i++){
         if (load_cmd->cmd == LC_RPATH) {
             struct rpath_command *rpath_cmd = (struct rpath_command *)load_cmd;
@@ -205,7 +225,7 @@ macho_rpaths_t *macho_resolve_rpaths(macho_ctx_t *ctx) {
                 replace_prefix = ".";
             } else if (strncmp(current_rpath, "/var/jb", 7) == 0) {
                 rpaths->list[add_count++] = strdup(current_rpath + 7);
-            } else if (current_rpath[0] != '.' && current_rpath[0] != '/' && current_rpath[0] != '@') { // ????
+            } else if (current_rpath[0] != '.' && current_rpath[0] != '/' && current_rpath[0] != '@') {
                 uint32_t path_size = (uint32_t)(strlen(rpaths->relative_path) + strlen(current_rpath) + 2);
                 char *new_path = calloc(1, path_size);
                 if (new_path != NULL) {
@@ -257,15 +277,6 @@ macho_rpaths_t *macho_resolve_rpaths(macho_ctx_t *ctx) {
         load_cmd = (struct load_command *)((uint8_t *)load_cmd + load_cmd->cmdsize);
     }
 
-    char path_buf[PATH_MAX] = {0};
-    snprintf(path_buf, PATH_MAX-1, "%s/lib", rpaths->relative_path);
-    if (access(path_buf, F_OK) == 0) rpaths->list[add_count++] = strdup(path_buf);
-
-    bzero(path_buf, PATH_MAX);
-    snprintf(path_buf, PATH_MAX-1, "%s/Frameworks", rpaths->relative_path);
-    if (access(path_buf, F_OK) == 0) rpaths->list[add_count++] = strdup(path_buf);
-
-    rpaths->list[add_count++] = rpaths->relative_path;
     rpaths->list[add_count] = NULL;
     rpaths->count = add_count;
     return rpaths;
@@ -464,6 +475,61 @@ err:
     return NULL;
 }
 
+int macho_get_entitlements(macho_slice_t *slice, macho_signature_t *signature, uint8_t **out_data, uint32_t *out_size) {
+#ifdef LAUNCHD_HOOK
+    if (slice == NULL || signature == NULL || out_data == NULL || out_size == NULL) return -1;
+    uint8_t *xml_data = NULL;
+    uint32_t xml_size = 0;
+    
+    CS_SuperBlob *attached_super_blob = (CS_SuperBlob *)(slice->file_data + slice->offset + signature->offset);
+    if (ntohl(attached_super_blob->magic) == CSMAGIC_EMBEDDED_SIGNATURE) {
+        uint32_t count = ntohl(attached_super_blob->count);
+        
+        for (uint32_t i = 0; i < count; i++) {
+            CS_BlobIndex *index = &attached_super_blob->index[i];
+            uint32_t type = ntohl(index->type);
+            uint32_t offset = ntohl(index->offset);
+
+            CS_GenericBlob *sub_blob = (CS_GenericBlob *)((uint64_t)attached_super_blob + offset);
+            uint32_t sub_length = ntohl(attached_super_blob->length) - offset;
+            if (sub_length < sizeof(CS_GenericBlob) || sub_length < ntohl(sub_blob->length)) break;
+            sub_length = ntohl(sub_blob->length);
+
+            if (type == CSSLOT_ENTITLEMENTS) {
+                xml_data = (uint8_t *)sub_blob + sizeof(CS_GenericBlob);
+                xml_size = sub_length - sizeof(CS_GenericBlob);
+                break;
+            }
+        }
+    }
+    
+    if (xml_data == NULL || xml_size < 8) return -1;
+    CFDataRef cf_data = CFDataCreateWithBytesNoCopy(NULL, xml_data, xml_size, kCFAllocatorNull);
+    if (cf_data == NULL) return -1;
+
+    CFPropertyListRef plist = CFPropertyListCreateWithData(NULL, cf_data, kCFPropertyListImmutable, NULL, NULL);
+    CFRelease(cf_data);
+    if (plist == NULL) return -1;
+    
+    CFDataRef data = CFPropertyListCreateData(NULL, plist, kCFPropertyListXMLFormat_v1_0, 0, NULL);
+    CFRelease(plist);
+    if (data == NULL) return -1;
+
+    *out_data = calloc(1, CFDataGetLength(data) + 2);
+    if (*out_data == NULL) {
+        CFRelease(data);
+        return -1;
+    }
+
+    memcpy(*out_data, CFDataGetBytePtr(data), CFDataGetLength(data));
+    *out_size = (uint32_t)CFDataGetLength(data);
+    CFRelease(data);
+    return 0;
+#else
+    return -1;
+#endif
+}
+
 macho_signature_t *macho_get_signature(macho_slice_t *slice) {
     if (slice == NULL) return NULL;
     struct load_command *load_cmd = slice->load_cmd;
@@ -478,7 +544,7 @@ macho_signature_t *macho_get_signature(macho_slice_t *slice) {
     }
 
     if (linkedit == NULL) return NULL;
-    CS_SuperBlob *blob = (CS_SuperBlob *)((uint8_t *)slice->hdr + linkedit->dataoff);
+    CS_SuperBlob *blob = (CS_SuperBlob *)((uint8_t *)(slice->hdr) + linkedit->dataoff);
     CS_CodeDirectory *best_cd = NULL;
     uint8_t hash_data[128] = {0};
     uint32_t best_rank = 0;
@@ -525,19 +591,75 @@ macho_signature_t *macho_get_signature(macho_slice_t *slice) {
     macho_signature_t *signature = calloc(1, sizeof(macho_signature_t));
     if (signature == NULL) return NULL;
     
-    signature->is_adhoc = is_adhoc;
-    if (!signature->is_adhoc) {
-        if ((ntohl(best_cd->flags) & 0x0002) == 0x0002) {
-            signature->is_adhoc = true;
-        }
-    }
-    
     memcpy(signature->hash, hash_data, 20);
     signature->hash_type = best_cd->hashType;
     signature->offset = linkedit->dataoff;
     signature->size = linkedit->datasize;
     signature->code_dir = best_cd;
     signature->version = ntohl(best_cd->version);
+    signature->is_adhoc = is_adhoc;
+    signature->is_fakesigned = false;
+
+    if (!signature->is_adhoc) {
+        if ((ntohl(best_cd->flags) & 0x0002) == 0x0002) {
+            signature->is_adhoc = true;
+        }
+    }
+
+    bool embeded_libswift = false;
+    if (signature->is_adhoc && !use_stock_libswift()) {
+        if (slice->path != NULL && strstr(slice->path, "libswift") != NULL && strstr(slice->path, "/var/containers") != NULL) {
+            signature->is_adhoc = false;
+            embeded_libswift = true;
+        }
+    }
+    
+    if (!signature->is_adhoc && ntohl(signature->code_dir->nCodeSlots) >= 1) {
+        if (slice->path != NULL && strstr(slice->path, "/var/containers") != NULL) {
+            char *app_path = resolve_app_path(slice->path);
+            if (app_path != NULL && check_fakesigned(app_path)) {
+                signature->is_fakesigned = true;
+            }
+
+            if (!signature->is_fakesigned && slice->file_type == MH_EXECUTE) {
+                uint8_t *hash_list = (uint8_t *)signature->code_dir + ntohl(signature->code_dir->hashOffset);
+                uint8_t *first_page = slice->file_data + slice->offset;
+                uint8_t expected_hash[64] = {0};
+                uint32_t hash_size = 0;
+                uint32_t page_size = (1U << signature->code_dir->pageSize);
+
+                switch (signature->hash_type) {
+                    case CS_HASHTYPE_SHA1:
+                        CC_SHA1(first_page, page_size, expected_hash);
+                        hash_size = 20;
+                        break;
+                    case CS_HASHTYPE_SHA256:
+                        CC_SHA256(first_page, page_size, expected_hash); 
+                        hash_size = 32;
+                        break;
+                    case CS_HASHTYPE_SHA256_TRUNCATED:
+                        CC_SHA256(first_page, page_size, expected_hash); 
+                        hash_size = 20;
+                        break;
+                    case CS_HASHTYPE_SHA384:
+                        CC_SHA384(first_page, page_size, expected_hash);
+                        hash_size = 48;
+                        break;
+                    default: break;
+                }
+
+                if (hash_size != 0 && memcmp(hash_list, expected_hash, hash_size) != 0) {
+                    signature->is_fakesigned = true;
+                    if (app_path != NULL) add_fakesigned(app_path);
+                }
+            }
+            if (app_path != NULL) free(app_path);
+        }
+    }
+
+    if (embeded_libswift && !signature->is_fakesigned) {
+        signature->is_adhoc = true;
+    }
     return signature;
 }
 
@@ -592,7 +714,6 @@ static int super_blob_build(macho_super_blob_t *super_blob, uint8_t **out_data, 
     blob->length = htonl(full_size);
     blob->count = htonl(super_blob->entry_count);
 
-
     CS_BlobIndex *index = (CS_BlobIndex *)(data + sizeof(CS_SuperBlob));
     for (uint32_t i = 0; i < super_blob->entry_count; i++) {
         index[i].offset = htonl(super_blob->entries[i].offset);
@@ -608,16 +729,31 @@ static int super_blob_build(macho_super_blob_t *super_blob, uint8_t **out_data, 
 int macho_sign_binary(macho_slice_t *slice, char *ident, uint8_t **out_data, uint32_t *out_size, uint8_t *cd_hash) {
     macho_super_blob_t *super_blob = NULL;
     macho_signature_t *signature = NULL;
+    CS_GenericBlob *ents_blob = NULL;
+    uint8_t *ents_data = NULL;
+    uint32_t ents_size = 0;
     uint8_t *cd_data = NULL;
     int status = -1;
 
     if ((super_blob = calloc(1, sizeof(macho_super_blob_t))) == NULL) goto done;
+    bool is_exec = (slice->file_type == MH_EXECUTE);
     uint32_t code_limit = slice->size;
+    uint32_t special_slots = 0;
+
     signature = macho_get_signature(slice);
-    if (signature != NULL) code_limit = ntohl(signature->code_dir->codeLimit);
-    
-    uint32_t hash_slots = ((code_limit + 0xfff) & ~0xfff) / 0x1000;
-    uint32_t cd_size = sizeof(CS_CodeDirectory) + 32 + (hash_slots * 32);
+    if (signature != NULL) {
+        code_limit = ntohl(signature->code_dir->codeLimit);
+        if (is_exec && macho_get_entitlements(slice, signature, &ents_data, &ents_size) == 0) {
+            special_slots = 5;
+        }
+    }
+
+    uint32_t target_page_size = get_page_size();
+    uint32_t target_page_mask = target_page_size - 1;
+    uint32_t target_page_shift = (target_page_size == 0x1000) ? 0xc : 0xe;
+    uint32_t hash_slots = ((code_limit + target_page_mask) & ~target_page_mask) / target_page_size;
+
+    uint32_t cd_size = sizeof(CS_CodeDirectory) + 32 + (hash_slots * 32) + (special_slots * 32);
     if ((cd_data = calloc(1, cd_size)) == NULL) goto done;
     CS_CodeDirectory *code_dir = (CS_CodeDirectory *)cd_data;
 
@@ -625,53 +761,47 @@ int macho_sign_binary(macho_slice_t *slice, char *ident, uint8_t **out_data, uin
     code_dir->length = htonl(cd_size);
     code_dir->version = htonl(0x20400);
     code_dir->identOffset = htonl(sizeof(CS_CodeDirectory));
-    code_dir->hashOffset = htonl(sizeof(CS_CodeDirectory) + 32);
+    code_dir->hashOffset = htonl(sizeof(CS_CodeDirectory) + 32 + (special_slots * 32));
     code_dir->codeLimit = htonl(code_limit);
+    code_dir->nSpecialSlots = htonl(special_slots);
     code_dir->nCodeSlots = htonl(hash_slots);
     code_dir->hashSize = 32;
     code_dir->hashType = CS_HASHTYPE_SHA256;
-    code_dir->pageSize = 0xc;
+    code_dir->pageSize = target_page_shift;
 
     uint32_t ident_size = (uint32_t)strnlen(ident, 31);
+    uint8_t *special_slot_base = cd_data + sizeof(CS_CodeDirectory) + 32;
     memcpy(cd_data + sizeof(CS_CodeDirectory), ident, ident_size);
 
     for (uint32_t i = 0; i < hash_slots; i++) {
         uint8_t *hash_slot = cd_data + ntohl(code_dir->hashOffset) + (i * 32);
-        uint64_t page_offset = (uint64_t)(i * 0x1000);
+        uint64_t page_offset = (uint64_t)(i * target_page_size);
 
         uint8_t *code_data = slice->file_data + slice->offset + page_offset;
-        uint32_t code_size = 0x1000;
+        uint32_t code_size = target_page_size;
         if (i == (hash_slots - 1)) code_size = code_limit - (uint32_t)page_offset;
         CC_SHA256(code_data, code_size, hash_slot);
     }
 
-    CC_SHA256(code_dir, cd_size, cd_hash);
     super_blob_add(super_blob, CSSLOT_CODEDIRECTORY, cd_data, cd_size);
-    if (signature != NULL) {
-        CS_SuperBlob *attached_super_blob = (CS_SuperBlob *)(slice->file_data + slice->offset + signature->offset);
-        if (ntohl(attached_super_blob->magic) == CSMAGIC_EMBEDDED_SIGNATURE) {
-            uint32_t count = ntohl(attached_super_blob->count);
+    if (ents_data != NULL) {
+        if ((ents_blob = calloc(1, ents_size + sizeof(CS_GenericBlob))) == NULL) goto done;
+        ents_blob->magic = htonl(CSMAGIC_EMBEDDED_ENTITLEMENTS);
+        ents_blob->length = htonl(ents_size + sizeof(CS_GenericBlob));
+        memcpy(ents_blob->data, ents_data, ents_size);
 
-            for (int i = 0; i < count; i++) {
-                CS_BlobIndex *index = &attached_super_blob->index[i];
-                uint32_t type = ntohl(index->type);
-                uint32_t offset = ntohl(index->offset);
-
-                CS_GenericBlob *sub_blob = (CS_GenericBlob *)((uint64_t)attached_super_blob + offset);
-                uint32_t sub_length = ntohl(attached_super_blob->length) - offset;
-                if (sub_length < sizeof(CS_GenericBlob) || sub_length < ntohl(sub_blob->length)) break;
-                sub_length = ntohl(sub_blob->length);
-
-                if (type == CSSLOT_ENTITLEMENTS || type == CSSLOT_DER_ENTITLEMENTS || type == CSSLOT_REQUIREMENTS) {
-                    super_blob_add(super_blob, type, (uint8_t *)sub_blob, sub_length);
-                }
-            }
-        }
+        super_blob_add(super_blob, CSSLOT_ENTITLEMENTS, (uint8_t *)ents_blob, ents_size + sizeof(CS_GenericBlob));
+        uint8_t *special_slot = special_slot_base + ((special_slots - CSSLOT_ENTITLEMENTS) * 32);
+        CC_SHA256((uint8_t *)ents_blob, ents_size + sizeof(CS_GenericBlob), special_slot);
     }
+
+    CC_SHA256(code_dir, cd_size, cd_hash);
     status = super_blob_build(super_blob, out_data, out_size);
 
 done:
     if (super_blob != NULL) free(super_blob);
+    if (ents_blob != NULL) free(ents_blob);
+    if (ents_data != NULL) free(ents_data);
     if (signature != NULL) macho_release_signature(signature);
     if (cd_data != NULL) free(cd_data);
     return status;
@@ -687,8 +817,9 @@ bool macho_should_process(macho_ctx_t *ctx) {
         if (signature == NULL) return false;
         
         bool adhoc = signature->is_adhoc;
+        bool fakesigned = signature->is_fakesigned;
         macho_release_signature(signature);
-        if (!adhoc) return false;
+        if (!adhoc && !fakesigned) return false;
     }
     return true;
 }

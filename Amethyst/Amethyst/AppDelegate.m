@@ -100,17 +100,26 @@ AmethystConfig *amethyst = NULL;
 @implementation AppDelegate
 @synthesize window = _window;
 
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation {
+    return ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad);
+}
 
 - (UIInterfaceOrientationMask)application:(UIApplication *)application supportedInterfaceOrientationsForWindow:(UIWindow *)window {
+    if (([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad)) {
+        return UIInterfaceOrientationMaskAllButUpsideDown;
+    }
     return UIInterfaceOrientationMaskPortrait;
 }
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations{
+    if (([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad)) {
+        return UIInterfaceOrientationMaskAllButUpsideDown;
+    }
     return UIInterfaceOrientationMaskPortrait;
 }
 
 - (BOOL)shouldAutorotate {
-    return NO;
+    return ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad);
 }
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {

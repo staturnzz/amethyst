@@ -1,7 +1,8 @@
 #include "info.h"
 #include "memory.h"
-#include "util.h"
+#include "trustcache.h"
 #include "ppl.h"
+#include "util.h"
 
 extern int IOMobileFramebufferGetMainDisplay(void**);
 extern int IOMobileFramebufferGetLayerDefaultSurface(void*, int, void **);
@@ -375,4 +376,42 @@ done:
     if (image_src != NULL) CFRelease(image_src);
     if (surface != NULL) CFRelease(surface);
     return status;
+}
+
+int update_jailbreak(void) {
+    if (access("/amethyst/update", F_OK) != 0) return 0;
+    if (kinfo->using_tnsv2 != 1) {
+        remove("/amethyst/update/jbutil");
+        remove("/amethyst/update/base_hook.dylib");
+        remove("/amethyst/update/libjailbreak.dylib");
+        rmdir("/amethyst/update");
+        sync();
+        return 0;
+    }
+
+    remove("/amethyst/jbutil");
+    remove("/usr/lib/base_hook.dylib");
+    remove("/usr/lib/libjailbreak.dylib");
+    sync();
+
+    rename("/amethyst/update/jbutil", "/amethyst/jbutil");
+    rename("/amethyst/update/base_hook.dylib", "/usr/lib/base_hook.dylib");
+    rename("/amethyst/update/libjailbreak.dylib", "/usr/lib/libjailbreak.dylib");
+
+    chown("/amethyst/jbutil", 0, 0);
+    chmod("/amethyst/jbutil", 0755);
+    chown("/usr/lib/base_hook.dylib", 0, 0);
+    chmod("/usr/lib/base_hook.dylib", 0755);
+    chown("/usr/lib/libjailbreak.dylib", 0, 0);
+    chmod("/usr/lib/libjailbreak.dylib", 0755);
+
+    trustcache_lock_add_binary("/amethyst/launchd_hook.dylib");
+    trustcache_lock_add_binary("/amethyst/jbutil");
+    trustcache_lock_add_binary("/usr/lib/base_hook.dylib");
+    trustcache_lock_add_binary("/usr/lib/libjailbreak.dylib");
+
+    rmdir("/amethyst/update");
+    chown("/amethyst", 0, 0);
+    chmod("/amethyst", 0777);
+    return 0;
 }

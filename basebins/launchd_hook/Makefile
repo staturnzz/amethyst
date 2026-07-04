@@ -3,8 +3,8 @@ STRIP = $(shell xcrun --sdk iphoneos --find strip)
 SDK = $(shell xcrun --sdk iphoneos --show-sdk-path)
 LDID = $(shell which ldid)
 
-CFLAGS := -I./include -I../common/include -isysroot $(SDK) -mios-version-min=12.0 -arch arm64 -arch arm64e \
-	-Werror -Wall -Wno-unused-variable -Wno-unused-function -fvisibility=hidden -fvisibility-inlines-hidden
+CFLAGS := -DLAUNCHD_HOOK=1 -I./include -I../common/include -isysroot $(SDK) -mios-version-min=12.0 -fno-objc-arc \
+	-arch arm64 -arch arm64e -Werror -Wall -Wno-unused-variable -Wno-unused-function -fvisibility=hidden -fvisibility-inlines-hidden
 
 LDFLAGS := -L$(SDK)/usr/lib -lc -lSystem -dynamiclib -framework CoreFoundation -framework ImageIO \
 	-framework CoreGraphics -framework IOSurface -framework IOKit ../resources/IOMobileFramebuffer.tbd \

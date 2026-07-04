@@ -10,6 +10,8 @@ int install_deb(char *path) {
 
 int install_tnsv2_support(void) {
     if (access("/chimera/.tnsv2_amethyst", F_OK) == 0) {
+        char *path = (char *)bundle_path("tnsv2_updater_stub.deb");
+        if (path != NULL) install_deb(path);
         vnode_hide_path("/chimera");
         return 0;
     }

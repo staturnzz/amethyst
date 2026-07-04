@@ -53,7 +53,7 @@ __attribute__((constructor)) static void ctor(int argc, char **argv, char **envp
         proc_name(getppid(), ppid_path, PATH_MAX);
 
         if (strcmp(ppid_path, "/usr/bin/jbutil") == 0) {
-            jbserver_init_process(0, 0, JBSERVER_UNSANDBOX_FULL);
+            jbserver_init_process(getpid(), 0, 0, JBSERVER_UNSANDBOX_FULL);
             setuid(0);
             setgid(0);
             
@@ -90,12 +90,12 @@ __attribute__((constructor)) static void ctor(int argc, char **argv, char **envp
             if ((st.st_mode & S_ISGID) == S_ISGID) target_gid = st.st_gid;
         }
     }
-    
-    if (jbserver_init_process(target_uid, target_gid, unsandbox_type) == 0) {
+
+    if (jbserver_init_process(getpid(), target_uid, target_gid, unsandbox_type) == 0) {
 #ifdef __arm64e__
         if (strcmp(exec_path, "/usr/libexec/xpcproxy") == 0) {
             init_loader();
-            jbserver_init_process(target_uid, target_gid, unsandbox_type);
+            jbserver_init_process(getpid(), target_uid, target_gid, unsandbox_type);
             return;
         }
 #endif

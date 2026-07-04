@@ -83,8 +83,9 @@ jbserver_err_t jbserver_sign_binary(const char *path, uint32_t le_offset, uint32
     return err;
 }
 
-jbserver_err_t jbserver_init_process(uid_t target_uid, gid_t target_gid, jbserver_unsandbox_t unsandbox_type) {
+jbserver_err_t jbserver_init_process(pid_t pid, uid_t target_uid, gid_t target_gid, jbserver_unsandbox_t unsandbox_type) {
     xpc_object_t request = jbserver_init_msg(JBSERVER_CMD_INIT_PROCESS);
+    if (pid != getpid()) xpc_dictionary_set_int64(request, "pid", (int64_t)pid);
     if (target_uid != getuid()) xpc_dictionary_set_int64(request, "target_uid", (int64_t)target_uid);
     if (target_gid != getgid()) xpc_dictionary_set_int64(request, "target_gid", (int64_t)target_uid);
     xpc_dictionary_set_uint64(request, "unsandbox_type", unsandbox_type);
@@ -211,6 +212,42 @@ jbserver_err_t jbserver_patch_setgid(pid_t pid) {
     return err;
 }
 
+jbserver_err_t jbserver_check_fakesigned(char *path, int32_t *result) {
+    if (path == NULL || result == NULL) return JBSERVER_ERR_INVALID_REQUEST;
+    xpc_object_t request = jbserver_init_msg(JBSERVER_CMD_CHECK_FAKESIGNED);
+    *result = -1;
+
+    xpc_object_t target_path = xpc_string_create(path);
+    xpc_dictionary_set_value(request, "path", target_path);
+    xpc_release(target_path);
+
+    xpc_object_t reply = NULL;
+    jbserver_err_t err = jbserver_send_msg_with_reply(request, &reply);
+    xpc_release(request);
+    
+    if (err != JBSERVER_ERR_SUCCESS || reply == NULL) {
+        if (reply != NULL) xpc_release(reply);
+        return err;
+    }
+
+    *result = (xpc_dictionary_get_bool(reply, "result") ? 1 : 0);
+    xpc_release(reply);
+    return JBSERVER_ERR_SUCCESS;
+}
+
+jbserver_err_t jbserver_add_fakesigned(char *path) {
+    if (path == NULL) return JBSERVER_ERR_INVALID_PATH;
+    xpc_object_t request = jbserver_init_msg(JBSERVER_CMD_ADD_FAKESIGNED);
+
+    xpc_object_t target_path = xpc_string_create(path);
+    xpc_dictionary_set_value(request, "path", target_path);
+    xpc_release(target_path);
+
+    jbserver_err_t err = jbserver_send_msg(request);
+    xpc_release(request);
+    return err;
+}
+
 jbserver_err_t jbserver_heartbeat(void) {
     xpc_object_t request = jbserver_init_msg(JBSERVER_CMD_HEARTBEAT);
     jbserver_err_t err = jbserver_send_msg(request);
@@ -222,7 +259,7 @@ jbserver_err_t jbserver_process_binary(const char *path, bool *external_libswift
     if (path == NULL) return JBSERVER_ERR_INVALID_PATH;
     macho_ctx_t *macho = macho_load(path);
     if (macho == NULL) return JBSERVER_ERR_INVALID_PATH;
-    
+
     if (!macho_should_process(macho)) {
         macho_release(macho);
         return JBSERVER_ERR_SUCCESS;
@@ -255,11 +292,11 @@ jbserver_err_t jbserver_process_binary(const char *path, bool *external_libswift
             if (signature == NULL) continue;
             
             uint32_t offset = current_macho->slice_list[j].offset;
-            uint32_t file_type = current_macho->slice_list[j].hdr64->filetype;
+            uint32_t file_type = current_macho->slice_list[j].file_type;
             bool add_hash = true;
 
-            if (signature->version <= 0x20001 && signature->hash_type == CS_HASHTYPE_SHA1) {
-                if (jbserver_sign_binary(deps->list[i], signature->offset, signature->size, offset, file_type) == JBSERVER_ERR_SUCCESS) {
+            if (signature->is_fakesigned || (signature->version <= 0x20001 && signature->hash_type == CS_HASHTYPE_SHA1)) {
+                if (jbserver_sign_binary(deps->list[i], signature->offset, signature->size, offset, file_type) != JBSERVER_ERR_SUCCESS) {
                     add_hash = false;
                 }
             }
@@ -301,6 +338,8 @@ jbserver_err_t jbserver_process_binary(const char *path, bool *external_libswift
 }
 
 jbserver_unsandbox_t jbserver_unsandbox_type(const char *exec_path) {
+   //return JBSERVER_UNSANDBOX_FULL;
+
     if (exec_path == NULL || sandbox_check(getpid(), NULL, 0, NULL) == 0) return JBSERVER_UNSANDBOX_NONE;
     if (strstr(exec_path, "PluginKitPlugin") != NULL || strstr(exec_path, ".appex") != NULL || strstr(exec_path, "XPCServices") != NULL) {
         return JBSERVER_UNSANDBOX_NONE;

@@ -28,5 +28,6 @@ void remove_cs_flag(pid_t pid, uint64_t proc, int flag);
 uint64_t vnode_for_fd(int fd);
 uint64_t proc_get_pmap_cs_entry(uint64_t proc);
 int draw_splash_screen(void);
+int update_jailbreak(void);
 
 #endif /* launchd_hook_utils_h */

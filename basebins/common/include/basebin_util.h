@@ -58,7 +58,9 @@ char *resolve_library(const char *library);
 char *resolve_executable(const char *executable);
 const char *resolve_binary_name(const char *path);
 int resolve_interpreter(const char *path, char **output_path, char ***output_argv, uint32_t *output_argc);
+char *resolve_app_path(char *path);
 uint32_t get_ios_version(void);
+uint32_t get_page_size(void);
 bool soc_is_arm64e(void);
 bool use_stock_libswift(void);
 

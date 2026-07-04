@@ -211,6 +211,7 @@ int jailbreak_handoff(void) {
     preload_basebin("/amethyst/launchd_hook.dylib");
     preload_basebin("/usr/lib/base_hook.dylib");
     preload_basebin("/usr/lib/libjailbreak.dylib");
+    remove_at_path("/amethyst/update");
 
     if (jbserver_heartbeat() == 0x1337) return 0;
     add_cs_flag(1, CS_VALID|CS_SIGNED|CS_GET_TASK_ALLOW|CS_DEBUGGED|CS_PLATFORM_BINARY|CS_INVALID_ALLOWED);

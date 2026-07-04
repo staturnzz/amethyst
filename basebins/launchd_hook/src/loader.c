@@ -13,7 +13,7 @@ static orig_spawn_t orig_posix_spawnp = NULL;
 static bool loader_blocked(const char *path, char **argv, posix_spawnattr_t *attr) {
     if (path == NULL || path[0] == '\0' || access("/usr/lib/base_hook.dylib", F_OK) != 0) return true;
     if (kinfo->initialized == 0 || kinfo->userspace_rebooting == 1) return true;
-    if (strstr(path, "debugserver") != NULL) return true;
+    if (strcmp(path, "/Developer/usr/bin/debugserver") == 0) return true;
 
     if (attr != NULL && *attr != NULL) {
         int proc_type = -1;
@@ -44,7 +44,13 @@ int process_binary(const char *path) {
     macho_ctx_t *macho = macho_load(path);
     if (macho == NULL) return -1;
 
-    macho_signature_t *signature = macho_get_signature(macho_get_best_slice(macho));
+    macho_slice_t *best_slice = macho_get_best_slice(macho);
+    if (best_slice == NULL) {
+        macho_release(macho);
+        return -1;
+    }
+
+    macho_signature_t *signature = macho_get_signature(best_slice);
     if (signature != NULL) {
         if (trustcache_static_check(signature->hash)) {
             macho_release_signature(signature);
@@ -74,11 +80,11 @@ int process_binary(const char *path) {
             if (signature == NULL) continue;
             
             uint32_t offset = current_macho->slice_list[j].offset;
-            uint32_t file_type = current_macho->slice_list[j].hdr64->filetype;
+            uint32_t file_type = current_macho->slice_list[j].file_type;
             bool add_hash = true;
 
-            if (kinfo->version[0] >= 11 && signature->version <= 0x20001) {
-                if (sign_binary(deps->list[i], signature->offset, signature->size, offset, file_type) == 0) {
+            if (signature->is_fakesigned || (signature->version <= 0x20001 && signature->hash_type == CS_HASHTYPE_SHA1)) {
+                if (sign_binary(deps->list[i], signature->offset, signature->size, offset, file_type) != 0) {
                     add_hash = false;
                 }
             }

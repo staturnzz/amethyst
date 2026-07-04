@@ -19,3 +19,5 @@ basebins/jbutil/shc/arm64.o
 basebins/launchd_hook/launchd_hook.dylib
 basebins/libjailbreak/libjailbreak.dylib
 /basebins/staging
+/basebins/staging_tnsv2
+/basebins/staging_tnsv2_stub

@@ -129,21 +129,18 @@ typedef struct {
 } cs_header_t;
 
 typedef struct {
-    union {
-        struct mach_header_64 *hdr64;
-        struct mach_header *hdr32;
-        uint8_t *hdr;
-    };
+    struct mach_header_64 *hdr;
+    struct load_command *load_cmd;
     cpu_type_t cpu_type;
     cpu_subtype_t cpu_subtype;
-    struct load_command *load_cmd;
+    uint32_t file_type;
     uint32_t cmd_count;
     uint32_t offset;
     uint32_t size;
     uint8_t *file_data;
     uint32_t file_size;
-    bool is_32bit;
     bool has_ptrauth;
+    char *path;
 } macho_slice_t;
 
 typedef struct {
@@ -183,6 +180,7 @@ typedef struct {
     uint8_t hash[20];
     uint8_t hash_type;
     bool is_adhoc;
+    bool is_fakesigned;
     uint32_t version;
     CS_CodeDirectory *code_dir;
     uint32_t offset;
@@ -208,7 +206,6 @@ macho_rpaths_t *macho_resolve_rpaths(macho_ctx_t *ctx);
 void macho_release_deps(macho_deps_t *deps);
 bool macho_uses_external_libswift(macho_deps_t *deps);
 macho_deps_t *macho_resolve_deps(macho_ctx_t *ctx, macho_rpaths_t *rpaths);
-uint8_t *macho_get_cd_hash(const char *path);
 macho_signature_t *macho_get_signature(macho_slice_t *slice);
 void macho_release_signature(macho_signature_t *signature);
 macho_slice_t *macho_get_best_slice(macho_ctx_t *ctx);

@@ -43,6 +43,8 @@
 #define CSSLOT_ALTERNATE_CODEDIRECTORY_MAX      0x00000005
 #define CSSLOT_ALTERNATE_CODEDIRECTORY_LIMIT    0x00001005
 
+#define CSMAGIC_REQUIREMENT                     0xfade0c00
+#define CSMAGIC_REQUIREMENTS                    0xfade0c01
 #define CS_SIGNER_TYPE_UNKNOWN                  0x00000000
 #define CSMAGIC_EMBEDDED_SIGNATURE              0xfade0cc0
 #define CSSLOT_ENTITLEMENTS                     0x00000005

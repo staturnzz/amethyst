@@ -1,0 +1,23 @@
+#!/bin/bash
+
+function exit_script() {
+	if ! [ -z "$CYDIA" ]; then
+		read -r fd ver <<EOT
+$CYDIA
+EOT
+        if [ "$ver" -ge 1 ]; then
+            echo "finish:$1" >&$fd
+        fi
+    fi
+    exit 0
+}
+
+chmod -R 0777 /amethyst/update | true
+rm -rf /amethyst/launchd_hook.dylib | true
+mv /amethyst/update/launchd_hook.dylib /amethyst/launchd_hook.dylib | true
+chmod 0755 /amethyst/launchd_hook.dylib | true
+chown 0:0 /amethyst/launchd_hook.dylib | true
+
+DYLD_INSERT_LIBRARIES=/amethyst/launchd_hook.dylib /amethyst/jbutil -h 2> /dev/null | true
+sync
+exit_script usreboot

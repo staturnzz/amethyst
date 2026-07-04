@@ -17,12 +17,22 @@ extern int csops(pid_t pid, unsigned int  ops, void *useraddr, size_t usersize);
     return self.hideStatusBar;
 }
 
-- (UIInterfaceOrientationMask)supportedInterfaceOrientations{
+- (UIInterfaceOrientationMask)application:(UIApplication *)application supportedInterfaceOrientationsForWindow:(UIWindow *)window {
+    if (([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad)) {
+        return UIInterfaceOrientationMaskAllButUpsideDown;
+    }
     return UIInterfaceOrientationMaskPortrait;
 }
 
-- (bool)shouldAutorotate {
-    return false;
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations{
+    if (([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad)) {
+        return UIInterfaceOrientationMaskAllButUpsideDown;
+    }
+    return UIInterfaceOrientationMaskPortrait;
+}
+
+- (BOOL)shouldAutorotate {
+    return ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad);
 }
 
 - (bool)deviceSupported {
@@ -88,33 +98,26 @@ extern int csops(pid_t pid, unsigned int  ops, void *useraddr, size_t usersize);
 
 - (void)setBackgroundImage:(NSString *)image_name {
     CGRect frame = self.view.bounds;
-    if (!UIAccessibilityIsReduceMotionEnabled()) {
-        frame.size.width += 80;
-        frame.size.height += 80;
-        frame.origin.x -= 40;
-        frame.origin.y -= 40;
+    if (([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad)) {
+        UIInterfaceOrientation orientation = [[UIApplication sharedApplication] statusBarOrientation];
+        
+        if (!UIInterfaceOrientationIsLandscape(orientation)) {
+            CGFloat old_width = frame.size.width;
+            CGFloat old_height = frame.size.height;
+            frame.size.width = old_height;
+            frame.size.height = old_width;
+        }
     }
 
+    frame.size.width += 80;
+    frame.size.height += 80;
+    frame.origin.x -= 40;
+    frame.origin.y -= 40;
+    
     self.bgImage = [[UIImageView alloc] initWithFrame:frame];
     self.bgImage.image = [UIImage imageNamed:image_name];
     self.bgImage.contentMode = UIViewContentModeScaleAspectFill;
     self.bgImage.backgroundColor = [UIColor clearColor];
-    
-    if (!UIAccessibilityIsReduceMotionEnabled()) {
-        UIInterpolatingMotionEffect *vm_effect = [[UIInterpolatingMotionEffect alloc]
-            initWithKeyPath:@"center.y" type:UIInterpolatingMotionEffectTypeTiltAlongVerticalAxis];
-        UIInterpolatingMotionEffect *hm_effect = [[UIInterpolatingMotionEffect alloc]
-            initWithKeyPath:@"center.x" type:UIInterpolatingMotionEffectTypeTiltAlongHorizontalAxis];
-        
-        vm_effect.minimumRelativeValue = @(-40);
-        vm_effect.maximumRelativeValue = @(40);
-        hm_effect.minimumRelativeValue = @(-40);
-        hm_effect.maximumRelativeValue = @(40);
-          
-        UIMotionEffectGroup *effect_group = [UIMotionEffectGroup new];
-        effect_group.motionEffects = @[hm_effect, vm_effect];
-        [self.bgImage addMotionEffect:effect_group];
-    }
     [self.view addSubview:self.bgImage];
     [self.view sendSubviewToBack:self.bgImage];
 }
@@ -127,7 +130,7 @@ extern int csops(pid_t pid, unsigned int  ops, void *useraddr, size_t usersize);
     UIView *currentBackground = self.view.subviews.firstObject;
     [self setBackgroundImage:[NSString stringWithFormat:@"bg_%@", amethyst.themeName]];
     
-    [UIView animateWithDuration:0.7 animations:^{
+    [UIView animateWithDuration:1.0 animations:^{
         currentBackground.alpha = 0.0;
     } completion:^(BOOL finished) {
         if (finished) [currentBackground removeFromSuperview];
@@ -204,12 +207,14 @@ extern int csops(pid_t pid, unsigned int  ops, void *useraddr, size_t usersize);
 
     self.gestureOverlay = [[UIView alloc] init];
     [self.gestureOverlay addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(closeAllCards:)]];
+    self.gestureOverlay.translatesAutoresizingMaskIntoConstraints = NO;
     self.gestureOverlay.backgroundColor = [UIColor clearColor];
     self.gestureOverlay.userInteractionEnabled = NO;
     self.gestureOverlay.frame = self.view.frame;
     [self.view addSubview:self.gestureOverlay];
     
     self.alertOverlay = [[UIView alloc] init];
+    self.alertOverlay.translatesAutoresizingMaskIntoConstraints = NO;
     self.alertOverlay.backgroundColor = [UIColor blackColor];
     self.alertOverlay.userInteractionEnabled = NO;
     self.alertOverlay.frame = self.view.frame;
@@ -291,26 +296,6 @@ extern int csops(pid_t pid, unsigned int  ops, void *useraddr, size_t usersize);
     [self applyConstraints];
 }
 
-- (UILayoutGuide *)safeLayoutGuide {
-    if (@available(iOS 11.0, *)) {
-        return self.view.safeAreaLayoutGuide;
-    } else {
-        UILayoutGuide *guide = [[UILayoutGuide alloc] init];
-        [self.view addLayoutGuide:guide];
-
-        id topGuide = self.topLayoutGuide;
-        id bottomGuide = self.bottomLayoutGuide;
-        
-        [NSLayoutConstraint activateConstraints:@[
-            [guide.topAnchor constraintEqualToAnchor:[topGuide bottomAnchor]],
-            [guide.bottomAnchor constraintEqualToAnchor:[bottomGuide topAnchor]],
-            [guide.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-            [guide.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor]
-        ]];
-        return guide;
-    }
-}
-
 - (NSString *)getErrorTitle:(jb_error_t)err {
     switch (err) {
         case JB_ERROR_SUCCESS: return @"Jailbreak Done";
@@ -356,11 +341,12 @@ extern int csops(pid_t pid, unsigned int  ops, void *useraddr, size_t usersize);
 }
 
 - (void)applyConstraints {
-    self.layoutGuide = [self safeLayoutGuide];
+    self.layoutGuide = self.view.safeAreaLayoutGuide;
     CGFloat versionOffset = ([UIScreen mainScreen].bounds.size.width == 320.0f) ? -15.0f : -30.0f;
 
     [NSLayoutConstraint activateConstraints:@[
         fillScreenConstraint(blurOverlay),
+        fillScreenConstraint(gestureOverlay),
         fillScreenConstraint(alertOverlay),
         popupCardConstraint(creditsPopupCard, amethyst.popupCardWidth, amethyst.popupCardHeight),
         popupCardConstraint(settingsPopupCard, amethyst.popupCardWidth, amethyst.popupCardHeight),

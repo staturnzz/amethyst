@@ -38,9 +38,7 @@ __attribute__((naked)) static int sys_csops_audittoken(pid_t pid, unsigned int o
 }
 
 static void *dlopen_hook(const char *path, int mode) {
-#ifndef __arm64e__
     if (path == NULL) return ((mode & RTLD_FIRST) != 0) ? RTLD_MAIN_ONLY : RTLD_DEFAULT;
-#endif
     void *caller = xpaci(__builtin_return_address(0));
     void *handle = NULL;
 
@@ -62,12 +60,14 @@ static void *dlopen_hook(const char *path, int mode) {
         }
     }
 
-    if (use_dyld3) {
-        handle = dyld3_dlopen_internal(path, mode, caller);
-        asm volatile ("");
-    } else {
-        handle = dyld2_dlopen_internal(path, mode, caller);
-        asm volatile ("");
+    if (path != NULL && strstr(path, "/var/containers") == NULL) {
+        if (use_dyld3) {
+            handle = dyld3_dlopen_internal(path, mode, caller);
+            asm volatile ("");
+        } else {
+            handle = dyld2_dlopen_internal(path, mode, caller);
+            asm volatile ("");
+        }
     }
 
     if (handle != NULL || path == NULL || (mode & RTLD_NOLOAD)) return handle;
@@ -110,11 +110,13 @@ static bool dlopen_preflight_hook(const char *path) {
         }
     }
 
-    if (use_dyld3) {
-        result = dyld3_dlopen_preflight_internal(path);
-    } else {
-        result = dyld2_dlopen_preflight_internal(path, caller);
-        asm volatile ("");
+    if (path != NULL && strstr(path, "/var/containers") == NULL) {
+        if (use_dyld3) {
+            result = dyld3_dlopen_preflight_internal(path);
+        } else {
+            result = dyld2_dlopen_preflight_internal(path, caller);
+            asm volatile ("");
+        }
     }
 
     if (result) return result;

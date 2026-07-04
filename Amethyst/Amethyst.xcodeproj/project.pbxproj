@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		2F0F3B742FD5CA02003D8249 /* aop.c in Sources */ = {isa = PBXBuildFile; fileRef = 2F0F3B732FD5CA02003D8249 /* aop.c */; };
+		2F14912B2FF96394006A270C /* tnsv2_updater_stub.deb in Resources */ = {isa = PBXBuildFile; fileRef = 2F1491292FF96366006A270C /* tnsv2_updater_stub.deb */; };
+		2F14912C2FF96394006A270C /* tnsv2_updater.deb in Resources */ = {isa = PBXBuildFile; fileRef = 2F14912A2FF96366006A270C /* tnsv2_updater.deb */; };
 		2F1C1F592F90448100839511 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 2F1C1F582F90448100839511 /* AppDelegate.m */; };
 		2F1C1F5F2F90448100839511 /* MainController.m in Sources */ = {isa = PBXBuildFile; fileRef = 2F1C1F5E2F90448100839511 /* MainController.m */; };
 		2F1C1F642F90448100839511 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2F1C1F632F90448100839511 /* Assets.xcassets */; };
@@ -43,6 +45,8 @@
 /* Begin PBXFileReference section */
 		2F0F3B722FD5CA02003D8249 /* aop.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = aop.h; sourceTree = "<group>"; };
 		2F0F3B732FD5CA02003D8249 /* aop.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = aop.c; sourceTree = "<group>"; };
+		2F1491292FF96366006A270C /* tnsv2_updater_stub.deb */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = tnsv2_updater_stub.deb; path = ../../basebins/tnsv2_updater_stub.deb; sourceTree = "<group>"; };
+		2F14912A2FF96366006A270C /* tnsv2_updater.deb */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = tnsv2_updater.deb; path = ../../basebins/tnsv2_updater.deb; sourceTree = "<group>"; };
 		2F1C1F542F90448100839511 /* Amethyst.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Amethyst.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2F1C1F572F90448100839511 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		2F1C1F582F90448100839511 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
@@ -83,7 +87,6 @@
 		2F3DCF392FB16CA700A257A2 /* libswift.deb */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libswift.deb; sourceTree = "<group>"; };
 		2F3DCF3D2FB16DAE00A257A2 /* zebra.deb */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = zebra.deb; sourceTree = "<group>"; };
 		2F3DCF3E2FB16DAF00A257A2 /* sileo.deb */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = sileo.deb; sourceTree = "<group>"; };
-		2F467F642FF1E4B300428E33 /* tnsv2_updater.deb */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = tnsv2_updater.deb; sourceTree = "<group>"; };
 		2F46C3542FEB31B900FFCCEB /* ppl.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ppl.h; sourceTree = "<group>"; };
 		2F46C3552FEB31B900FFCCEB /* ppl.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ppl.c; sourceTree = "<group>"; };
 		2F5125812FBCE2FF00AE1074 /* dma.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = dma.h; sourceTree = "<group>"; };
@@ -100,11 +103,19 @@
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		2F0903722FF489AD00A22C2F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		2F1C1F4B2F90448100839511 = {
 			isa = PBXGroup;
 			children = (
 				2F1C1F562F90448100839511 /* Amethyst */,
 				2F1C1F552F90448100839511 /* Products */,
+				2F0903722FF489AD00A22C2F /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -120,8 +131,9 @@
 			isa = PBXGroup;
 			children = (
 				2F631DDE2FB2079B002FEF84 /* bootstrap-1500.tar.lzfse */,
-				2F467F642FF1E4B300428E33 /* tnsv2_updater.deb */,
 				2F631DDF2FB2079B002FEF84 /* bootstrap-1600.tar.lzfse */,
+				2F1491292FF96366006A270C /* tnsv2_updater_stub.deb */,
+				2F14912A2FF96366006A270C /* tnsv2_updater.deb */,
 				2F3DCF3E2FB16DAF00A257A2 /* sileo.deb */,
 				2F3DCF3D2FB16DAE00A257A2 /* zebra.deb */,
 				2F3DCF392FB16CA700A257A2 /* libswift.deb */,
@@ -274,6 +286,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2F14912B2FF96394006A270C /* tnsv2_updater_stub.deb in Resources */,
+				2F14912C2FF96394006A270C /* tnsv2_updater.deb in Resources */,
 				2F631DE02FB207E9002FEF84 /* bootstrap-1500.tar.lzfse in Resources */,
 				2F631DE12FB207E9002FEF84 /* bootstrap-1600.tar.lzfse in Resources */,
 				2F3DCF412FB16EAE00A257A2 /* sileo.deb in Resources */,
@@ -456,8 +470,9 @@
 				INFOPLIST_FILE = Amethyst/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -467,7 +482,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/Amethyst",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.2;
 				OTHER_LDFLAGS = (
 					"-framework",
 					IOSurface,
@@ -496,8 +511,9 @@
 				INFOPLIST_FILE = Amethyst/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -507,7 +523,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/Amethyst",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.2;
 				OTHER_LDFLAGS = (
 					"-framework",
 					IOSurface,

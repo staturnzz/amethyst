@@ -5,7 +5,7 @@
 static uint32_t ios_version = -1;
 static uint32_t is_arm64e = -1;
 static uint32_t stock_libswift = -1;
-static uint64_t dyld_base = 0;
+static uint32_t runtime_page_size = -1;
 
 char **env_copy(char **env, uint32_t addtional) {
     uint32_t count = addtional + 1;
@@ -525,6 +525,25 @@ int resolve_interpreter(const char *path, char **output_path, char ***output_arg
     return 0;
 }
 
+char *resolve_app_path(char *path) {
+    if (path == NULL || strstr(path, ".app/") == NULL) return NULL;
+    char *copy = strdup(path);
+    if (copy == NULL) return NULL;
+
+    char *app_end = strstr(copy, ".app/");
+    if (app_end == NULL) {
+        free(copy);
+        return NULL;
+    }
+    
+    app_end += strlen(".app");
+    app_end[0] = '\0';
+
+    char *resolved = resolve_path(copy);
+    free(copy);
+    return resolved;
+}
+
 uint32_t get_ios_version(void) {
     if (ios_version != -1) return ios_version;
     char version_str[64] = {0};
@@ -558,6 +577,25 @@ uint32_t get_ios_version(void) {
 
     ios_version = 0;
     return 0;
+}
+
+uint32_t get_page_size(void) {
+    if (runtime_page_size == -1) {
+        uint32_t cpu_family = 0;
+        size_t size = sizeof(cpu_family);
+        sysctlbyname("hw.cpufamily", &cpu_family, &size, NULL, 0);
+    
+        switch (cpu_family) {
+            case CPUFAMILY_ARM_CYCLONE:
+            case CPUFAMILY_ARM_TYPHOON:
+                runtime_page_size = 0x1000;
+                break;
+            default:
+                runtime_page_size = 0x4000;
+                break;
+        }
+    }
+    return runtime_page_size;
 }
 
 bool soc_is_arm64e(void) {

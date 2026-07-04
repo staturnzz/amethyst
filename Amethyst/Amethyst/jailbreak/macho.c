@@ -524,7 +524,7 @@ int macho_super_blob_add(macho_super_blob_t *super_blob, uint32_t type, uint8_t 
 int macho_super_blob_build(macho_super_blob_t *super_blob, uint8_t **out_data, uint32_t *out_size) {
     if (super_blob == NULL || out_data == NULL || out_size == 0 || super_blob->entry_count == 0) return -1;
     uint32_t full_size = sizeof(CS_SuperBlob) + (sizeof(CS_BlobIndex) * super_blob->entry_count);
-    
+
     for (uint32_t i = 0; i < super_blob->entry_count; i++) {
         super_blob->entries[i].offset = full_size;
         full_size += super_blob->entries[i].size;
@@ -538,7 +538,6 @@ int macho_super_blob_build(macho_super_blob_t *super_blob, uint8_t **out_data, u
     blob->length = htonl(full_size);
     blob->count = htonl(super_blob->entry_count);
 
-
     CS_BlobIndex *index = (CS_BlobIndex *)(data + sizeof(CS_SuperBlob));
     for (uint32_t i = 0; i < super_blob->entry_count; i++) {
         index[i].offset = htonl(super_blob->entries[i].offset);
@@ -549,76 +548,4 @@ int macho_super_blob_build(macho_super_blob_t *super_blob, uint8_t **out_data, u
     *out_data = data;
     *out_size = full_size;
     return 0;
-}
- 
-int macho_sign_binary(macho_slice_t *slice, char *ident, uint8_t **out_data, uint32_t *out_size, uint8_t *cd_hash) {
-    macho_super_blob_t *super_blob = NULL;
-    macho_signature_t *signature = NULL;
-    uint8_t *cd_data = NULL;
-    int status = -1;
-
-    if ((super_blob = calloc(1, sizeof(macho_super_blob_t))) == NULL) goto done;
-    uint32_t code_limit = slice->size;
-    signature = macho_get_signature(slice);
-    if (signature != NULL) code_limit = ntohl(signature->code_dir->codeLimit);
-    
-    uint32_t hash_slots = ((code_limit + 0xfff) & ~0xfff) / 0x1000;
-    uint32_t cd_size = sizeof(CS_CodeDirectory) + 32 + (hash_slots * 32);
-    if ((cd_data = calloc(1, cd_size)) == NULL) goto done;
-    CS_CodeDirectory *code_dir = (CS_CodeDirectory *)cd_data;
-
-    code_dir->magic = htonl(CSMAGIC_CODEDIRECTORY);
-    code_dir->length = htonl(cd_size);
-    code_dir->version = htonl(0x20400);
-    code_dir->identOffset = htonl(sizeof(CS_CodeDirectory));
-    code_dir->hashOffset = htonl(sizeof(CS_CodeDirectory) + 32);
-    code_dir->codeLimit = htonl(code_limit);
-    code_dir->nCodeSlots = htonl(hash_slots);
-    code_dir->hashSize = 32;
-    code_dir->hashType = CS_HASHTYPE_SHA256;
-    code_dir->pageSize = 0xc;
-
-    uint32_t ident_size = (uint32_t)strnlen(ident, 31);
-    memcpy(cd_data + sizeof(CS_CodeDirectory), ident, ident_size);
-
-    for (uint32_t i = 0; i < hash_slots; i++) {
-        uint8_t *hash_slot = cd_data + ntohl(code_dir->hashOffset) + (i * 32);
-        uint64_t page_offset = (uint64_t)(i * 0x1000);
-
-        uint8_t *code_data = slice->file_data + slice->offset + page_offset;
-        uint32_t code_size = 0x1000;
-        if (i == (hash_slots - 1)) code_size = code_limit - (uint32_t)page_offset;
-        CC_SHA256(code_data, code_size, hash_slot);
-    }
-
-    CC_SHA256(code_dir, cd_size, cd_hash);
-    macho_super_blob_add(super_blob, CSSLOT_CODEDIRECTORY, cd_data, cd_size);
-    if (signature != NULL) {
-        CS_SuperBlob *attached_super_blob = (CS_SuperBlob *)(slice->file_data + slice->offset + signature->offset);
-        if (ntohl(attached_super_blob->magic) == CSMAGIC_EMBEDDED_SIGNATURE) {
-            uint32_t count = ntohl(attached_super_blob->count);
-
-            for (int i = 0; i < count; i++) {
-                CS_BlobIndex *index = &attached_super_blob->index[i];
-                uint32_t type = ntohl(index->type);
-                uint32_t offset = ntohl(index->offset);
-
-                CS_GenericBlob *sub_blob = (CS_GenericBlob *)((uint64_t)attached_super_blob + offset);
-                uint32_t sub_length = ntohl(attached_super_blob->length) - offset;
-                if (sub_length < sizeof(CS_GenericBlob) || sub_length < ntohl(sub_blob->length)) break;
-                sub_length = ntohl(sub_blob->length);
-
-                if (type == CSSLOT_ENTITLEMENTS || type == CSSLOT_DER_ENTITLEMENTS || type == CSSLOT_REQUIREMENTS) {
-                    macho_super_blob_add(super_blob, type, (uint8_t *)sub_blob, sub_length);
-                }
-            }
-        }
-    }
-    status = macho_super_blob_build(super_blob, out_data, out_size);
-
-done:
-    if (super_blob != NULL) free(super_blob);
-    if (signature != NULL) macho_release_signature(signature);
-    if (cd_data != NULL) free(cd_data);
-    return status;
 }
